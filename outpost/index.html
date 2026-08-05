@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outpost order integration — Dully</title>
+<meta name="description" content="Receiving Dully orders through Outpost: event payloads, field reference, and the order callback.">
+<style>
+/* ─────────── tokens ─────────── */
+:root{
+  --paper:#fbfaf6;
+  --paper-2:#f4f2ea;
+  --in:#17233a;           /* events you receive */
+  --out:#c8776f;          /* the callback you send */
+  --out-soft:#eecac4;
+  --ink:#17233a;
+  --ink-soft:#5b6880;
+  --pen:#2a4ba8;
+  --rule:#d8d5c9;
+  --rule-soft:#e6e3d9;
+  --warn:#8a5a12;
+  --mono:ui-monospace,"Cascadia Mono","Cascadia Code","SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --shadow:0 1px 0 rgba(23,35,58,.06),0 10px 30px -18px rgba(23,35,58,.35);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#15181d; --paper-2:#1d2127;
+    --in:#e7e5dd; --out:#c08e89; --out-soft:#4a3330;
+    --ink:#e7e5dd; --ink-soft:#9aa3b2; --pen:#93aaf0;
+    --rule:#2f353e; --rule-soft:#262b33; --warn:#d8ac60;
+    --shadow:0 1px 0 rgba(0,0,0,.4),0 14px 34px -20px rgba(0,0,0,.9);
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.62;
+  background-image:linear-gradient(to bottom,rgba(0,0,0,.018) 0 1px,transparent 1px 100%);
+  background-size:100% 2.6em;
+}
+@media (prefers-color-scheme:dark){body{background-image:none}}
+
+/* ─────────── shell ─────────── */
+.shell{max-width:1180px;margin:0 auto;padding:0 24px}
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:56px;align-items:start}
+.layout>*{min-width:0}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr);gap:0}}
+
+/* ─────────── nav ─────────── */
+.nav{position:sticky;top:0;max-height:100vh;overflow-y:auto;padding:40px 0 60px}
+@media (max-width:900px){
+  .nav{position:static;max-height:none;padding:24px 0 8px;border-bottom:1px dashed var(--rule)}
+  .nav ol{columns:2;column-gap:20px}
+  .nav li{break-inside:avoid}
+}
+.nav-mark{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px}
+.nav ol{list-style:none;margin:0;padding:0}
+.nav a{
+  display:block;padding:5px 0 5px 12px;border-left:2px solid var(--rule-soft);
+  font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);text-decoration:none;
+}
+.nav a:hover{color:var(--pen);border-left-color:var(--pen)}
+.nav a[aria-current="true"]{color:var(--ink);border-left-color:var(--ink);background:linear-gradient(to right,var(--paper-2),transparent)}
+.nav a:focus-visible{outline:2px solid var(--pen);outline-offset:2px}
+
+/* ─────────── hero ─────────── */
+.hero{padding:64px 0 8px}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 20px}
+h1{
+  font-family:var(--mono);font-weight:700;font-size:clamp(28px,5.2vw,50px);line-height:1.04;
+  letter-spacing:-.035em;margin:0 0 20px;text-transform:uppercase;
+}
+h1 .thin{display:block;font-weight:400;font-size:.62em;color:var(--ink-soft);letter-spacing:-.01em;margin-top:6px}
+.lede{font-size:19px;max-width:64ch;margin:0 0 14px}
+.lede-2{font-size:16px;max-width:64ch;margin:0;color:var(--ink-soft)}
+
+.pad{position:relative;margin:52px 0 22px;padding-bottom:20px}
+.sheet{background:var(--paper);border:1px solid var(--rule);box-shadow:var(--shadow);border-radius:2px}
+.sheet.behind{position:absolute;inset:14px -9px -11px 22px;background:var(--out-soft);border-color:rgba(0,0,0,.14);transform:rotate(.9deg);z-index:0}
+.sheet.front{position:relative;z-index:2;transform:rotate(-.45deg)}
+@media (max-width:700px){
+  .sheet.front,.sheet.behind{transform:none}
+  .sheet.behind{inset:10px -6px -9px 16px}
+}
+.sheet-head{
+  display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;justify-content:space-between;
+  padding:13px 20px;border-bottom:1px dashed var(--rule);
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);
+}
+.sheet-head b{color:var(--ink);letter-spacing:.1em}
+.sheet-body{padding:4px 20px 16px}
+.sheet-body pre{margin:0;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6}
+.legs{display:flex;flex-wrap:wrap;gap:8px;margin:28px 0 0;padding:0;list-style:none}
+.leg{
+  display:flex;gap:10px;align-items:center;font-family:var(--mono);font-size:12px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);
+  border:1px solid var(--rule);border-radius:2px;padding:7px 12px;background:var(--paper);
+}
+.leg i{width:9px;height:9px;border-radius:1px;display:inline-block;border:1px solid rgba(0,0,0,.25)}
+.leg.in i{background:var(--paper);box-shadow:inset 0 0 0 1px var(--rule)}
+.leg.out i{background:var(--out);border-color:rgba(0,0,0,.2)}
+
+/* ─────────── sections ─────────── */
+section{padding:56px 0 8px;border-top:1px dashed var(--rule);margin-top:48px}
+.sec-mark{font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px}
+h2{font-family:var(--mono);font-size:clamp(21px,2.6vw,27px);font-weight:700;letter-spacing:-.02em;margin:0 0 18px;text-transform:uppercase}
+h3{font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:.02em;margin:36px 0 10px;text-transform:uppercase}
+h4{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.06em;margin:26px 0 8px;text-transform:uppercase;color:var(--ink-soft)}
+p{max-width:74ch;margin:0 0 16px}
+ul,ol{max-width:74ch;padding-left:22px}
+li{margin:0 0 7px}
+a{color:var(--pen);text-decoration-thickness:1px;text-underline-offset:2px}
+a:focus-visible{outline:2px solid var(--pen);outline-offset:2px;border-radius:2px}
+strong{font-weight:650}
+code{font-family:var(--mono);font-size:.885em;background:var(--paper-2);border:1px solid var(--rule-soft);border-radius:3px;padding:.08em .34em}
+h3 code,h4 code,td code,th code{background:none;border:0;padding:0}
+
+.route{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-family:var(--mono);
+  background:var(--paper-2);border:1px solid var(--rule);border-left:3px solid var(--out);
+  border-radius:2px;padding:11px 14px;margin:0 0 18px;font-size:14px;overflow-x:auto;
+}
+.route .verb{font-weight:700;letter-spacing:.08em}
+
+figure.code{margin:0 0 22px;border:1px solid var(--rule);border-radius:2px;background:var(--paper-2);overflow:hidden}
+figure.code.dir-in{border-left:3px solid var(--in)}
+figure.code.dir-out{border-left:3px solid var(--out)}
+figure.code figcaption{
+  display:flex;gap:12px;align-items:center;justify-content:space-between;
+  padding:8px 12px;border-bottom:1px dashed var(--rule);
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);
+}
+figure.code pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;color:var(--ink)}
+.copy{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  background:none;border:1px solid var(--rule);border-radius:2px;color:var(--ink-soft);
+  padding:3px 8px;cursor:pointer;flex:none;
+}
+.copy:hover{color:var(--pen);border-color:var(--pen)}
+.copy:focus-visible{outline:2px solid var(--pen);outline-offset:2px}
+
+.tw{overflow-x:auto;margin:0 0 24px;border:1px solid var(--rule);border-radius:2px}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:14.5px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-soft);background:var(--paper-2);border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+td:first-child{font-family:var(--mono);font-size:13px;white-space:nowrap}
+td.wrap:first-child{white-space:normal;font-family:var(--sans);font-size:14.5px}
+
+.note{
+  border:1px solid var(--rule);border-left:3px solid var(--pen);border-radius:2px;
+  background:var(--paper-2);padding:14px 16px;margin:0 0 22px;max-width:74ch;
+}
+.note.warn{border-left-color:var(--warn)}
+.note p{margin:0}
+.note p+p{margin-top:10px}
+.note .tag{
+  display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px;
+}
+.pill{
+  display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+  border:1px solid var(--rule);border-radius:2px;padding:2px 7px;color:var(--ink-soft);
+  background:var(--paper);white-space:nowrap;
+}
+
+footer{
+  border-top:1px dashed var(--rule);margin-top:56px;padding:26px 0 64px;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);
+}
+footer p{max-width:none;margin:0}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:8px;top:8px;z-index:9;background:var(--paper);border:1px solid var(--ink);padding:8px 12px;font-family:var(--mono);font-size:12px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+:target{scroll-margin-top:24px}
+@media print{.nav,.copy{display:none}body{background:#fff}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+<div class="layout">
+
+<nav class="nav" aria-label="Sections">
+  <div class="nav-mark">Outpost&nbsp;/&nbsp;orders</div>
+  <ol>
+    <li><a href="#start">How it works</a></li>
+    <li><a href="#auth">Authentication</a></li>
+    <li><a href="#ids">Identifiers</a></li>
+    <li><a href="#delivery">What arrives</a></li>
+    <li><a href="#approved">order.approved</a></li>
+    <li><a href="#invoice">Order fields</a></li>
+    <li><a href="#lines">Order lines</a></li>
+    <li><a href="#handling">Handling fee line</a></li>
+    <li><a href="#discounts">Discounts &amp; gift cards</a></li>
+    <li><a href="#cancelled">order.cancelled</a></li>
+    <li><a href="#callback">Order callback</a></li>
+    <li><a href="#parsing">Parsing rules</a></li>
+    <li><a href="#values">Value reference</a></li>
+  </ol>
+</nav>
+
+<main id="main">
+
+<header class="hero">
+  <p class="eyebrow">Dully&nbsp;·&nbsp;POS integration</p>
+  <h1>Outpost order integration<span class="thin">Receiving Dully orders, and reporting back</span></h1>
+  <p class="lede">Dully sends an event to Outpost when an order is approved, and another when it is cancelled. Outpost signs each one and delivers it to your endpoint. Every approved order includes a URL you can post to with your own order reference.</p>
+  <p class="lede-2">This page documents what arrives, how to verify it, and the callback you send. Fields that are not listed here are not sent.</p>
+
+  <div class="pad">
+    <div class="sheet behind" aria-hidden="true"></div>
+    <div class="sheet front">
+      <div class="sheet-head">
+        <span><b>You receive</b> — from Outpost</span>
+        <span>signed POST</span>
+      </div>
+      <div class="sheet-body">
+<pre>POST /your-endpoint HTTP/1.1
+content-type: application/json
+webhook-id: e4b5e2ff-1e4f-465f-924b-967172028f24
+webhook-timestamp: 1770813296
+webhook-signature: v1,K5oZfzN95Z9UVu1EsfQmfVNQhnkZ2pj9o9NDN/H/pI4=
+webhook-topic: order.approved
+webhook-source: dully
+
+{ "@context": "https://schema.org", "@type": "Invoice", … }</pre>
+      </div>
+    </div>
+  </div>
+
+  <ul class="legs">
+    <li class="leg in"><i></i>You receive: order events</li>
+    <li class="leg out"><i></i>You send: the order callback</li>
+  </ul>
+</header>
+
+<!-- ───────────────── start ───────────────── -->
+<section id="start">
+  <p class="sec-mark">Overview</p>
+  <h2>How it works</h2>
+
+  <p>There are two things to build.</p>
+
+  <h3>Receive order events</h3>
+  <p>Outpost posts to your endpoint for each restaurant you are subscribed to, following the <a href="https://www.standardwebhooks.com/">Standard Webhooks</a> spec. The topic arrives in the <code>webhook-topic</code> header, and the body is the order data on its own.</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>Topic</th><th>Sent when</th><th>Body</th></tr></thead>
+    <tbody>
+      <tr><td>order.approved</td><td>The order is paid and confirmed by the restaurant.</td><td>A <a href="https://schema.org/Invoice">schema.org Invoice</a> with the full order.</td></tr>
+      <tr><td>order.cancelled</td><td>An order you already received is cancelled.</td><td>The order id and its new status.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Post the callback</h3>
+  <p>Every approved order carries a <code>callbackUrl</code>. Post your order id, receipt id, print state or error to it. The values appear on the order in Dully, where restaurant staff and support can see them. It is optional, but without it nobody on the Dully side can tell whether the order reached your POS.</p>
+
+  <h3>Responding to a delivery</h3>
+  <p>Answer with any <code>2xx</code> status. Verify the signature, store the event, and respond; do the POS work afterwards rather than holding the connection open.</p>
+  <p>Anything other than <code>2xx</code>, or no response at all, counts as a failed attempt and Outpost retries with exponential backoff. Defaults are ten attempts with a 30 second base interval, and the operator can change both. A retry reuses the same event id. Once attempts are exhausted the event can still be redelivered by hand from the Outpost portal.</p>
+
+  <div class="note">
+    <span class="tag">Handle repeat deliveries</span>
+    <p>Delivery is at-least-once, so the same event can arrive more than once. Use <code>webhook-id</code> as your idempotency key and ignore an event you have already processed.</p>
+  </div>
+</section>
+
+<!-- ───────────────── auth ───────────────── -->
+<section id="auth">
+  <p class="sec-mark">Security</p>
+  <h2>Authentication</h2>
+  <p>An order passes through three systems, and each hop is authenticated differently. Only the last one is yours to handle.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Hop</th><th>How it is authenticated</th><th>Your part</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="wrap">Dully → Outpost</td>
+        <td>A bearer token that Dully holds for the Outpost API.</td>
+        <td>Nothing.</td>
+      </tr>
+      <tr>
+        <td class="wrap">Outpost → your endpoint</td>
+        <td>A Standard Webhooks signature in the <code>webhook-signature</code> header.</td>
+        <td>Verify every delivery. This is the important one.</td>
+      </tr>
+      <tr>
+        <td class="wrap">Your callback → Dully</td>
+        <td>A signed token inside the <code>callbackUrl</code>.</td>
+        <td>Post to the URL as you received it.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Dully issues you no API key and runs no OAuth flow. You hold one long-lived secret, the Outpost signing secret for your endpoint, and one short-lived token per order that arrives inside the payload.</p>
+
+  <h3>Verifying a delivery</h3>
+  <p>Your endpoint is a public URL, so the signature is the only thing separating a real order from anything else that reaches it. Verify every delivery and reject anything that does not match.</p>
+
+  <p>Deliveries are signed according to <a href="https://www.standardwebhooks.com/">Standard Webhooks</a>. The signature is an HMAC-SHA256 over <code>webhook-id.webhook-timestamp.body</code>, base64 encoded, sent as <code>webhook-signature: v1,&lt;signature&gt;</code>. Your secret looks like <code>whsec_…</code>.</p>
+
+  <p>Do not implement this by hand. Standard Webhooks publishes <a href="https://github.com/standard-webhooks/standard-webhooks/tree/main/libraries">verification libraries</a> for most languages that handle the signing, the constant-time comparison and the timestamp tolerance for you. Pass them the raw request body, before any JSON parsing, and your secret.</p>
+
+  <ul>
+    <li><a href="https://www.standardwebhooks.com/">Standard Webhooks</a> — the spec and the verification libraries.</li>
+    <li><a href="https://hookdeck.com/docs/outpost/destinations/webhook#signature">Outpost webhook signatures</a> — how Outpost applies the spec, including secret rotation.</li>
+  </ul>
+
+  <p>The secret is generated when your endpoint is registered and is shown in the Outpost tenant portal, which is also where you rotate it. During a rotation window <code>webhook-signature</code> carries a space-delimited list with one signature per valid secret, so accept the delivery if any of them matches. The libraries already do this.</p>
+
+  <h3>The callback token</h3>
+  <p>The <code>t</code> query parameter on <code>callbackUrl</code> is a JSON Web Token signed with HMAC-SHA256. Dully holds the signing key, so you cannot mint or alter a token, and you do not need to verify one. Post the URL back unchanged.</p>
+
+  <p>Decoding it is useful when you are debugging. The claims are not secret, but the signed token is:</p>
+
+<figure class="code dir-in">
+<figcaption><span>Token payload, decoded</span><button class="copy" type="button">Copy</button></figcaption>
+<pre>{
+  "orderId": "e4b5e2ff-1e4f-465f-924b-967172028f24",
+  "storeId": 3,
+  "exp": 1770819000
+}</pre>
+</figure>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Claim</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>orderId</td><td>The order the token is for. Matches <code>webhook-id</code>.</td></tr>
+      <tr><td>storeId</td><td>Internal store reference Dully uses to load the order. Nothing you need to act on.</td></tr>
+      <tr><td>exp</td><td>Expiry, set two hours after the order is due. Call back well before this.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>Handling it</h4>
+  <ul>
+    <li><strong>The URL is the credential.</strong> Anyone holding it can write callback fields to that order, so keep it out of shared logs, error reports and anything a client can read.</li>
+    <li><strong>One token per order.</strong> It authorises the callback fields on that single order and nothing else. It grants no read access and no access to any other order.</li>
+    <li><strong>Send it byte for byte.</strong> Re-encoding, trimming or rebuilding the query string invalidates the signature and the callback is refused with <code>401</code>.</li>
+    <li><strong>Drop it when you are done.</strong> Keep it alongside the order until you have called back, then discard it. There is no way to renew a token.</li>
+  </ul>
+</section>
+
+<!-- ───────────────── ids ───────────────── -->
+<section id="ids">
+  <p class="sec-mark">Reference</p>
+  <h2>Identifiers</h2>
+  <p>Several identifiers travel with an order. Use them for different things.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Field</th><th>Example</th><th>Use it for</th></tr></thead>
+    <tbody>
+      <tr><td>webhook-id</td><td><code>e4b5e2ff-…</code></td><td>The order key. Unique per order, identical in the approved and the cancelled event. Store it and deduplicate on it.</td></tr>
+      <tr><td>identifier</td><td><code>e4b5e2ff-…</code></td><td>The same order id, inside the invoice body. Use whichever is easier to reach.</td></tr>
+      <tr><td>referencesOrder<wbr>.orderNumber</td><td><code>ORDER-1407</code></td><td>What staff and the customer call the order. Print this on tickets.</td></tr>
+      <tr><td>referencesOrder<wbr>.confirmationNumber</td><td><code>56058742</code></td><td>The payment transaction id, for reconciling against the payment provider.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ───────────────── delivery ───────────────── -->
+<section id="delivery">
+  <p class="sec-mark">Reference</p>
+  <h2>What arrives</h2>
+  <p>A delivery is a <code>POST</code> with the order data as the body. Everything about the event itself is in the headers, so read the topic from <code>webhook-topic</code> rather than looking for it in the JSON.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Header</th><th>Example</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>webhook-id</td><td><code>e4b5e2ff-…</code></td><td>The order id. Stable across retries and identical in the approved and cancelled events. Deduplicate on this.</td></tr>
+      <tr><td>webhook-timestamp</td><td><code>1770813296</code></td><td>Unix timestamp in seconds for the delivery attempt. Part of the signed content, and what you check against your replay tolerance.</td></tr>
+      <tr><td>webhook-signature</td><td><code>v1,K5oZfzN95Z9…</code></td><td>The signature. See <a href="#auth">Authentication</a>.</td></tr>
+      <tr><td>webhook-topic</td><td><code>order.approved</code></td><td>Which event this is. Also <code>order.cancelled</code>.</td></tr>
+      <tr><td>webhook-source</td><td><code>dully</code></td><td>Always <code>dully</code>.</td></tr>
+      <tr><td>content-type</td><td><code>application/json</code></td><td>The body is JSON.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Match header names case-insensitively. <code>webhook-timestamp</code> is the time of the attempt, not of the order, so it changes on a retry while <code>webhook-id</code> stays the same.</p>
+
+  <div class="note warn">
+    <span class="tag">No restaurant id in the delivery</span>
+    <p>The body carries the restaurant's name and address under <code>seller</code>, but not its Dully id, and there is no tenant header. If you serve more than one restaurant, register a separate endpoint per restaurant so you can tell them apart by the URL that was called.</p>
+  </div>
+</section>
+
+<!-- ───────────────── approved ───────────────── -->
+<section id="approved">
+  <p class="sec-mark">Event</p>
+  <h2>order.approved</h2>
+  <p>The body is a schema.org <code>Invoice</code>. It holds the order id, the order itself under <code>referencesOrder</code>, and the amount charged under <code>totalPaymentDue</code>.</p>
+
+<figure class="code dir-in">
+<figcaption><span>Full delivery: delivery order, one line with an option, discount code and gift card</span><button class="copy" type="button">Copy</button></figcaption>
+<pre>POST /your-endpoint HTTP/1.1
+content-type: application/json
+webhook-id: e4b5e2ff-1e4f-465f-924b-967172028f24
+webhook-timestamp: 1770813296
+webhook-signature: v1,K5oZfzN95Z9UVu1EsfQmfVNQhnkZ2pj9o9NDN/H/pI4=
+webhook-topic: order.approved
+webhook-source: dully
+
+{
+  "@context": "https://schema.org",
+  "@type": "Invoice",
+  "identifier": "e4b5e2ff-1e4f-465f-924b-967172028f24",
+  "paymentStatus": "https://schema.org/PaymentComplete",
+  "totalPaymentDue": {
+    "@type": "PriceSpecification",
+    "price": 143.0,
+    "priceCurrency": "DKK"
+  },
+  "referencesOrder": {
+    "@type": "Order",
+    "orderNumber": "ORDER-1407",
+    "identifier": "1407",
+    "orderDate": "2026-02-11T12:34:56+01:00",
+    "orderStatus": "https://schema.org/OrderProcessing",
+    "confirmationNumber": "56058742",
+    "discount": 12.0,
+    "discountCode": "WELCOME10",
+    "discountCurrency": "DKK",
+    "billingAddress": {
+      "@type": "PostalAddress",
+      "addressCountry": "DK",
+      "streetAddress": "Norrebrogade 13",
+      "postalCode": "2200",
+      "addressLocality": "Copenhagen N",
+      "telephone": "+4596091666",
+      "email": "test@dully.io"
+    },
+    "customer": {
+      "@type": "Person",
+      "name": "Dully",
+      "additionalName": "Test",
+      "email": "test@dully.io",
+      "telephone": "+4596091666"
+    },
+    "seller": {
+      "@type": "Organization",
+      "name": "Burgers - Kastrup",
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "DK",
+        "streetAddress": "Amager Landevej 1",
+        "postalCode": "2770",
+        "addressLocality": "Kastrup",
+        "telephone": "35353569"
+      },
+      "image": "https://example.com/media/14672/restaurant.jpg?quality=70"
+    },
+    "orderDelivery": {
+      "@type": "ParcelDelivery",
+      "deliveryAddress": {
+        "@type": "PostalAddress",
+        "addressCountry": "DK",
+        "streetAddress": "Norrebrogade 13",
+        "postalCode": "2200",
+        "addressLocality": "Copenhagen N",
+        "telephone": "+4596091666",
+        "email": "test@dully.io"
+      },
+      "expectedArrivalFrom": "2026-02-11T13:10:00+01:00",
+      "provider": { "@type": "Organization", "name": "Wolt" }
+    },
+    "acceptedOffer": [
+      {
+        "@type": "Offer",
+        "price": 36.0,
+        "priceCurrency": "DKK",
+        "eligibleQuantity": { "@type": "QuantitativeValue", "value": 3 },
+        "priceSpecification": {
+          "@type": "PriceSpecification",
+          "price": 12.0,
+          "priceCurrency": "DKK"
+        },
+        "itemOffered": {
+          "@type": "Product",
+          "name": "Ham",
+          "category": "Burgers",
+          "productID": "42094",
+          "sku": "29163378",
+          "image": "https://example.com/media/9911/ham.jpg"
+        },
+        "additionalProperty": [
+          { "@type": "PropertyValue", "name": "customerComment", "value": "No onions" }
+        ],
+        "addOn": [
+          {
+            "@type": "Offer",
+            "price": 15.0,
+            "priceCurrency": "DKK",
+            "eligibleQuantity": { "@type": "QuantitativeValue", "value": 3 },
+            "priceSpecification": {
+              "@type": "PriceSpecification",
+              "price": 5.0,
+              "priceCurrency": "DKK"
+            },
+            "itemOffered": {
+              "@type": "Product",
+              "name": "Extra ham",
+              "category": "Toppings",
+              "sku": "29163401"
+            }
+          }
+        ]
+      },
+      {
+        "@type": "Offer",
+        "price": 1.95,
+        "priceCurrency": "DKK",
+        "itemOffered": { "@type": "Service", "name": "Handling fee" },
+        "additionalProperty": [
+          { "@type": "PropertyValue", "name": "pickupTime", "value": "2026-02-11T13:10:00.000Z" },
+          { "@type": "PropertyValue", "name": "orderSourceType", "value": "Takeaway" },
+          { "@type": "PropertyValue", "name": "shippingMethod", "value": "Delivery" },
+          { "@type": "PropertyValue", "name": "customerComment", "value": "Please call on arrival" },
+          { "@type": "PropertyValue", "name": "deliveryComment", "value": "Leave at the front door" },
+          { "@type": "PropertyValue", "name": "tipsAmount", "value": 17.15 },
+          { "@type": "PropertyValue", "name": "callbackUrl", "value": "https://example.com/api/callback/order/?t=eyJhbGciOi…" },
+          { "@type": "PropertyValue", "name": "priceBeforeDiscount", "value": 155.0 },
+          { "@type": "PropertyValue", "name": "discountCode", "value": "WELCOME10" },
+          { "@type": "PropertyValue", "name": "giftCard", "identifier": "GC-ABC123", "value": 50.0 }
+        ]
+      }
+    ]
+  }
+}</pre>
+</figure>
+</section>
+
+<!-- ───────────────── invoice fields ───────────────── -->
+<section id="invoice">
+  <p class="sec-mark">Reference</p>
+  <h2>Order fields</h2>
+
+  <h3>Invoice</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>Field</th><th>Presence</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>identifier</td><td><span class="pill">always</span></td><td>The order id. Same value as <code>webhook-id</code>.</td></tr>
+      <tr><td>paymentStatus</td><td><span class="pill">always</span></td><td><code>https://schema.org/PaymentComplete</code>. Only paid orders are sent.</td></tr>
+      <tr><td>totalPaymentDue</td><td><span class="pill">always</span></td><td>The amount charged, including VAT, after all discounts and gift cards.</td></tr>
+      <tr><td>referencesOrder</td><td><span class="pill">always</span></td><td>The order.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>referencesOrder</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>Field</th><th>Presence</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>orderNumber</td><td><span class="pill">always</span></td><td>The order number staff and customers use, such as <code>ORDER-1407</code>.</td></tr>
+      <tr><td>identifier</td><td><span class="pill">always</span></td><td>The bare cart number without prefix, such as <code>1407</code>.</td></tr>
+      <tr><td>orderDate</td><td><span class="pill">always</span></td><td>When the order was placed. ISO-8601.</td></tr>
+      <tr><td>orderStatus</td><td><span class="pill">always</span></td><td><code>https://schema.org/OrderProcessing</code>.</td></tr>
+      <tr><td>confirmationNumber</td><td><span class="pill">always</span></td><td>Payment transaction id.</td></tr>
+      <tr><td>discount</td><td><span class="pill">always</span></td><td>Total discount on the order, as a decimal. <code>0</code> if nothing was discounted.</td></tr>
+      <tr><td>discountCode</td><td><span class="pill">conditional</span></td><td>The discount or campaign code. A string for one code, an array for several. Gift card codes never appear here.</td></tr>
+      <tr><td>discountCurrency</td><td><span class="pill">conditional</span></td><td>Currency of the discount. Sent together with <code>discountCode</code>.</td></tr>
+      <tr><td>billingAddress</td><td><span class="pill">always</span></td><td>Customer billing address. <code>PostalAddress</code>.</td></tr>
+      <tr><td>customer</td><td><span class="pill">always</span></td><td><code>Person</code>: <code>name</code> is the first name, <code>additionalName</code> the last name, plus <code>email</code> and <code>telephone</code>.</td></tr>
+      <tr><td>seller</td><td><span class="pill">always</span></td><td><code>Organization</code>: the restaurant <code>name</code>, its <code>address</code>, and an absolute <code>image</code> URL when the restaurant has a picture.</td></tr>
+      <tr><td>orderDelivery</td><td><span class="pill">delivery only</span></td><td><code>deliveryAddress</code>, <code>expectedArrivalFrom</code> (planned courier arrival, ISO-8601) and <code>provider.name</code> (the delivery company, for example <code>Wolt</code>).</td></tr>
+      <tr><td>acceptedOffer</td><td><span class="pill">always</span></td><td>The order lines, followed by one handling fee line.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>PostalAddress</h4>
+  <p>Billing, delivery and restaurant addresses share one shape: <code>addressCountry</code> (two-letter code), <code>streetAddress</code>, <code>postalCode</code>, <code>addressLocality</code>, <code>telephone</code>, <code>email</code>. Individual fields are left out when there is no value.</p>
+</section>
+
+<!-- ───────────────── lines ───────────────── -->
+<section id="lines">
+  <p class="sec-mark">Reference</p>
+  <h2>Order lines</h2>
+  <p>Each entry in <code>acceptedOffer</code> is an <code>Offer</code>. The entries with a <code>Product</code> are what the customer bought. The last entry is the handling fee and is described in the next section.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Field</th><th>Presence</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>price</td><td><span class="pill">always</span></td><td>Line total with VAT. Quantity, options and discounts are already applied.</td></tr>
+      <tr><td>priceCurrency</td><td><span class="pill">always</span></td><td>ISO currency code, for example <code>DKK</code>.</td></tr>
+      <tr><td>eligibleQuantity</td><td><span class="pill">always</span></td><td><code>QuantitativeValue</code> holding the quantity.</td></tr>
+      <tr><td>priceSpecification</td><td><span class="pill">always</span></td><td>Unit price with VAT, options and discounts already applied.</td></tr>
+      <tr><td>itemOffered</td><td><span class="pill">always</span></td><td><code>Product</code>: <code>name</code>, <code>category</code>, <code>productID</code>, <code>sku</code>, and an absolute <code>image</code> URL when the product has one.</td></tr>
+      <tr><td>addOn</td><td><span class="pill">conditional</span></td><td>Options and modifiers chosen for this line. Each is an <code>Offer</code> with the same fields. Add-ons carry no product image.</td></tr>
+      <tr><td>additionalProperty</td><td><span class="pill">conditional</span></td><td>Sent only when the customer wrote a note on this line: a single <code>customerComment</code> property.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <span class="tag">Reading prices</span>
+    <p><code>priceSpecification</code> is the unit price with VAT, including the options on that line and its share of any discount. A 5.00 burger with 8.00 of toppings and 1.00 off arrives as a unit price of 12.00, and three of them as a line <code>price</code> of 36.00.</p>
+    <p>The <code>addOn</code> prices are shown separately for display, so do not add them on top of the parent line when you calculate a total. Use <code>totalPaymentDue.price</code> for the amount charged.</p>
+  </div>
+</section>
+
+<!-- ───────────────── handling fee ───────────────── -->
+<section id="handling">
+  <p class="sec-mark">Reference</p>
+  <h2>Handling fee line</h2>
+  <p>The last offer in <code>acceptedOffer</code> is always the handling fee: <code>itemOffered</code> is a <code>Service</code> named <code>Handling fee</code>, and <code>price</code> is the fee with VAT. Its <code>additionalProperty</code> array carries the order details that schema.org has no field for.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>name</th><th>Presence</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>pickupTime</td><td><span class="pill">always</span></td><td>When the order is due, in UTC as <code>yyyy-MM-ddTHH:mm:ss.fffZ</code>. Schedule production against this.</td></tr>
+      <tr><td>orderSourceType</td><td><span class="pill">always</span></td><td>Where the order was placed. <a href="#values">Values</a>.</td></tr>
+      <tr><td>shippingMethod</td><td><span class="pill">always</span></td><td><code>Pickup</code>, <code>Delivery</code> or <code>DineIn</code>.</td></tr>
+      <tr><td>priceBeforeDiscount</td><td><span class="pill">always</span></td><td>Order total with VAT before any discount or gift card. The final amount is <code>totalPaymentDue.price</code> and is not repeated here.</td></tr>
+      <tr><td>customerComment</td><td><span class="pill">conditional</span></td><td>The customer's note for the whole order.</td></tr>
+      <tr><td>deliveryComment</td><td><span class="pill">conditional</span></td><td>The note for the courier. Delivery orders only.</td></tr>
+      <tr><td>tipsAmount</td><td><span class="pill">conditional</span></td><td>Tip as a decimal with two places. Left out when there is no tip.</td></tr>
+      <tr><td>tableNumber</td><td><span class="pill">conditional</span></td><td>The table, for table and QR ordering.</td></tr>
+      <tr><td>callbackUrl</td><td><span class="pill">conditional</span></td><td>Where to post your order reference. See <a href="#callback">Order callback</a>. If it is missing, there is nothing to call back to.</td></tr>
+      <tr><td>discountCode</td><td><span class="pill">conditional</span></td><td>One property per discount code. Repeats <code>referencesOrder.discountCode</code> for readers that only parse this array.</td></tr>
+      <tr><td>giftCard</td><td><span class="pill">conditional</span></td><td>One property per gift card, with <code>identifier</code> (the card code) and <code>value</code> (the amount taken from it).</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <span class="tag">Names can repeat</span>
+    <p><code>discountCode</code> and <code>giftCard</code> appear once per code or card, so read <code>additionalProperty</code> as a list and group by <code>name</code>. Building a dictionary of unique keys will drop values.</p>
+  </div>
+</section>
+
+<!-- ───────────────── discounts ───────────────── -->
+<section id="discounts">
+  <p class="sec-mark">Money</p>
+  <h2>Discounts &amp; gift cards</h2>
+  <p>Dully has several ways to reduce what a customer pays. Only some of them come with a code.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Kind</th><th>Code in the payload</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="wrap">Discount and campaign codes</td>
+        <td>Yes. <code>referencesOrder.discountCode</code>, and one <code>discountCode</code> property per code.</td>
+        <td>Lowers line prices and the total.</td>
+      </tr>
+      <tr>
+        <td class="wrap">Gift cards</td>
+        <td>Yes. One <code>giftCard</code> property per card, with the code and the redeemed amount in the same node.</td>
+        <td>Lowers the amount due.</td>
+      </tr>
+      <tr>
+        <td class="wrap">Vouchers, member cards, stamp cards, loyalty rewards</td>
+        <td>No.</td>
+        <td>Lowers line prices and the total, with no code to report.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>To reconcile a total: <code>priceBeforeDiscount</code> minus <code>totalPaymentDue.price</code> is everything that was taken off, whether or not it has a code. <code>referencesOrder.discount</code> gives the discount total on its own.</p>
+</section>
+
+<!-- ───────────────── cancelled ───────────────── -->
+<section id="cancelled">
+  <p class="sec-mark">Event</p>
+  <h2>order.cancelled</h2>
+  <p>Sent when an order you already received is cancelled, usually because the restaurant rejected it. The body is the order id and its new status.</p>
+
+<figure class="code dir-in">
+<figcaption><span>Full delivery</span><button class="copy" type="button">Copy</button></figcaption>
+<pre>POST /your-endpoint HTTP/1.1
+content-type: application/json
+webhook-id: e4b5e2ff-1e4f-465f-924b-967172028f24
+webhook-timestamp: 1770814262
+webhook-signature: v1,gXm4TQ2pR8vLcE6yZbNwJ5uKdHsA9fY1oPqV3iCtXeM=
+webhook-topic: order.cancelled
+webhook-source: dully
+
+{
+  "id": "e4b5e2ff-1e4f-465f-924b-967172028f24",
+  "status": "cancelled"
+}</pre>
+</figure>
+
+  <p>The <code>id</code> matches the <code>identifier</code> on the invoice you already received, so it maps straight onto that order.</p>
+
+  <div class="note warn">
+    <span class="tag">Void the whole order</span>
+    <p>Dully puts back everything the order used: gift card balances, vouchers, stamps and single-use discount codes are all restored, so a one-time code becomes usable again. Cancel the order in full on your side rather than partly unwinding it.</p>
+  </div>
+</section>
+
+<!-- ───────────────── callback ───────────────── -->
+<section id="callback">
+  <p class="sec-mark">You send</p>
+  <h2>Order callback</h2>
+  <p>Take the <code>callbackUrl</code> from the handling fee properties and post to it. Send the URL exactly as you received it, including the query string. Do not rebuild or re-encode it.</p>
+
+  <div class="route"><span class="verb">POST</span><span>{callbackUrl}</span></div>
+
+  <p>The <code>t</code> parameter in the URL authenticates the call, so no header credential is needed. See <a href="#auth">Authentication</a> for what it contains and how to handle it. Send <code>Content-Type: application/json</code>.</p>
+
+  <h3>Request</h3>
+  <p>Every field is optional. Send what you have, and post again later when you know more. Field names are matched case-insensitively.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>externalOrderId</td><td>string</td><td>Your order id. Shown to Dully staff and support as the POS reference.</td></tr>
+      <tr><td>externalTransactionId</td><td>string</td><td>Your transaction or receipt id.</td></tr>
+      <tr><td>posPrinted</td><td>string</td><td>Whether the ticket printed.</td></tr>
+      <tr><td>status</td><td>string</td><td>How the order ended up in your system.</td></tr>
+      <tr><td>error</td><td>string</td><td>What went wrong, if something did.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Extra keys are accepted rather than rejected, so a richer body will not fail. Only the fields above are stored on the order.</p>
+
+<figure class="code dir-out">
+<figcaption><span>Request</span><button class="copy" type="button">Copy</button></figcaption>
+<pre>POST /api/callback/order/?t=eyJhbGciOi… HTTP/1.1
+Host: example.com
+Content-Type: application/json
+
+{
+  "externalOrderId": "POS-99812",
+  "externalTransactionId": "TX-55231",
+  "posPrinted": "true",
+  "status": "accepted"
+}</pre>
+</figure>
+
+  <h3>Response</h3>
+  <p>All responses use the same envelope. <code>isUpdated</code> is <code>false</code> when the body held nothing to store; the call still succeeded.</p>
+
+<figure class="code dir-in">
+<figcaption><span>200 OK</span><button class="copy" type="button">Copy</button></figcaption>
+<pre>{
+  "success": true,
+  "data": {
+    "orderId": "e4b5e2ff-1e4f-465f-924b-967172028f24",
+    "isUpdated": true
+  }
+}</pre>
+</figure>
+
+<figure class="code dir-in">
+<figcaption><span>Error</span><button class="copy" type="button">Copy</button></figcaption>
+<pre>{
+  "success": false,
+  "message": "Invalid callback token."
+}</pre>
+</figure>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td>200</td><td>Accepted and processed.</td><td>Nothing. Check <code>data.isUpdated</code> to confirm something was stored.</td></tr>
+      <tr><td>400</td><td>The <code>t</code> parameter or the body is missing, or the token does not identify an order.</td><td>Do not retry unchanged. The URL was altered or the body was empty.</td></tr>
+      <tr><td>401</td><td>The token failed validation.</td><td>Do not retry. Use the <code>callbackUrl</code> exactly as delivered.</td></tr>
+      <tr><td>404</td><td>The order no longer exists.</td><td>Stop.</td></tr>
+      <tr><td>500</td><td>Callbacks are not enabled for this site.</td><td>Retry later and let Dully know.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <span class="tag">Safe to repeat</span>
+    <p>The callback overwrites the fields it receives, so posting the same body twice is harmless and a later status replaces an earlier one.</p>
+  </div>
+</section>
+
+<!-- ───────────────── parsing ───────────────── -->
+<section id="parsing">
+  <p class="sec-mark">Reference</p>
+  <h2>Parsing rules</h2>
+  <ul>
+    <li><strong>Empty values are removed.</strong> Nulls are stripped from the payload and empty arrays are left out. Treat every field as optional unless this page says it is always sent.</li>
+    <li><strong>Text is UTF-8 and unescaped.</strong> Danish and other national characters arrive as themselves, not as escape sequences.</li>
+    <li><strong>Money is a JSON number</strong> in major units, never a string and never in cents. <code>1.95</code> means 1.95 in the order's currency.</li>
+    <li><strong><code>pickupTime</code> is UTC</strong> with milliseconds and a <code>Z</code> suffix. <code>orderDate</code> and <code>expectedArrivalFrom</code> are ISO-8601 and may carry a local offset instead, so parse the offset rather than assuming UTC.</li>
+    <li><strong>Types are schema.org.</strong> Each object carries an <code>@type</code>, and enum-style values are full schema.org URLs such as <code>https://schema.org/OrderProcessing</code>.</li>
+    <li><strong>New fields can appear.</strong> Ignore what you do not recognise instead of failing the payload.</li>
+  </ul>
+</section>
+
+<!-- ───────────────── values ───────────────── -->
+<section id="values">
+  <p class="sec-mark">Reference</p>
+  <h2>Value reference</h2>
+
+  <h3>orderSourceType</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>Value</th><th>Where the order was placed</th></tr></thead>
+    <tbody>
+      <tr><td>Takeaway</td><td>The restaurant's website.</td></tr>
+      <tr><td>Headless</td><td>The mobile app.</td></tr>
+      <tr><td>Kiosk</td><td>A self-service kiosk in the restaurant.</td></tr>
+      <tr><td>Table</td><td>Table or QR ordering.</td></tr>
+      <tr><td>External</td><td>A marketplace integration such as Wolt.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>shippingMethod</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>Pickup</td><td>The customer collects the order. No <code>orderDelivery</code> is sent.</td></tr>
+      <tr><td>Delivery</td><td>Delivered to the customer. <code>orderDelivery</code> is present.</td></tr>
+      <tr><td>DineIn</td><td>Eaten in the restaurant. Often sent with <code>tableNumber</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<footer>
+  <p>Dully · Outpost order integration · Fields not documented here are not sent.</p>
+</footer>
+
+</main>
+</div>
+</div>
+
+<script>
+// Copy buttons — copy the code block this button belongs to.
+document.querySelectorAll('.copy').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var pre = btn.closest('figure').querySelector('pre');
+    var done = function(){
+      var was = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function(){ btn.textContent = was; }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(pre.textContent).then(done, function(){});
+    } else {
+      var r = document.createRange(); r.selectNodeContents(pre);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      s.removeAllRanges();
+    }
+  });
+});
+
+// Mark the section currently being read in the sidebar.
+(function(){
+  var links = {};
+  document.querySelectorAll('.nav a').forEach(function(a){ links[a.getAttribute('href').slice(1)] = a; });
+  var sections = document.querySelectorAll('section[id]');
+  if (!('IntersectionObserver' in window) || !sections.length) return;
+  var visible = new Set();
+  var paint = function(){
+    var current = null;
+    sections.forEach(function(s){ if (visible.has(s.id) && !current) current = s.id; });
+    Object.keys(links).forEach(function(id){
+      if (id === current) links[id].setAttribute('aria-current','true');
+      else links[id].removeAttribute('aria-current');
+    });
+  };
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
+    });
+    paint();
+  }, { rootMargin: '-10% 0px -70% 0px' });
+  sections.forEach(function(s){ io.observe(s); });
+})();
+</script>
+</body>
+</html>
