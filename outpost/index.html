@@ -10,12 +10,13 @@
 :root{
   --paper:#fbfaf6;
   --paper-2:#f4f2ea;
-  --in:#17233a;           /* events you receive */
-  --out:#c8776f;          /* the callback you send */
-  --out-soft:#eecac4;
-  --ink:#17233a;
-  --ink-soft:#5b6880;
-  --pen:#2a4ba8;
+  --in:#0e0b3d;           /* events you receive — dully navy */
+  --out:#600ad9;          /* the callback you send — dully purple */
+  --out-soft:#e9defb;
+  --ink:#0e0b3d;
+  --ink-soft:#5c5a7a;
+  --pen:#600ad9;
+  --accent:#ffef61;       /* dully yellow */
   --rule:#d8d5c9;
   --rule-soft:#e6e3d9;
   --warn:#8a5a12;
@@ -25,10 +26,11 @@
 }
 @media (prefers-color-scheme:dark){
   :root{
-    --paper:#15181d; --paper-2:#1d2127;
-    --in:#e7e5dd; --out:#c08e89; --out-soft:#4a3330;
-    --ink:#e7e5dd; --ink-soft:#9aa3b2; --pen:#93aaf0;
-    --rule:#2f353e; --rule-soft:#262b33; --warn:#d8ac60;
+    --paper:#12101f; --paper-2:#1a1730;
+    --in:#e9e7f2; --out:#b18cff; --out-soft:#3a2d5e;
+    --ink:#e9e7f2; --ink-soft:#9d99bb; --pen:#b18cff;
+    --accent:#ffef61;
+    --rule:#332f4e; --rule-soft:#282442; --warn:#d8ac60;
     --shadow:0 1px 0 rgba(0,0,0,.4),0 14px 34px -20px rgba(0,0,0,.9);
   }
 }
@@ -55,15 +57,18 @@ body{
   .nav ol{columns:2;column-gap:20px}
   .nav li{break-inside:avoid}
 }
+.brand{display:inline-flex;align-items:center;color:var(--ink);margin-bottom:14px}
+.brand svg{height:26px;width:auto;display:block}
+.brand:focus-visible{outline:2px solid var(--pen);outline-offset:4px;border-radius:2px}
 .nav-mark{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px}
 .nav ol{list-style:none;margin:0;padding:0}
-.nav a{
+.nav ol a{
   display:block;padding:5px 0 5px 12px;border-left:2px solid var(--rule-soft);
   font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);text-decoration:none;
 }
-.nav a:hover{color:var(--pen);border-left-color:var(--pen)}
-.nav a[aria-current="true"]{color:var(--ink);border-left-color:var(--ink);background:linear-gradient(to right,var(--paper-2),transparent)}
-.nav a:focus-visible{outline:2px solid var(--pen);outline-offset:2px}
+.nav ol a:hover{color:var(--pen);border-left-color:var(--pen)}
+.nav ol a[aria-current="true"]{color:var(--ink);border-left-color:var(--accent);background:linear-gradient(to right,var(--paper-2),transparent)}
+.nav ol a:focus-visible{outline:2px solid var(--pen);outline-offset:2px}
 
 /* ─────────── hero ─────────── */
 .hero{padding:64px 0 8px}
@@ -187,6 +192,9 @@ footer p{max-width:none;margin:0}
 <div class="layout">
 
 <nav class="nav" aria-label="Sections">
+  <a class="brand" href="https://dully.io" aria-label="Dully">
+    <svg viewBox="0 0 66 31" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true"><path fill="currentColor" d="M50.8562 15.5564C50.8562 17.6724 51.6108 19.4722 52.9384 20.7063C54.3027 21.9764 56.0264 22.7169 58.1802 22.7169H59.6526C60.1909 22.7169 60.5503 22.8574 60.8372 23.1051C61.1242 23.3519 61.3039 23.7753 61.3039 24.269V24.3041C61.3039 24.7977 61.1242 25.2211 60.8372 25.4679C60.5503 25.7148 60.1909 25.8562 59.6526 25.8562H51.2147V30.1602H65.5408V7.40678H61.0527V15.5555C61.0527 16.4374 60.7657 17.0724 60.2633 17.5661C59.7608 18.0597 59.1144 18.3417 58.2168 18.3417H58.1811C57.2834 18.3417 56.6371 18.0597 56.1346 17.5661C55.6322 17.0724 55.3452 16.4374 55.3452 15.5555V7.40678H50.8571V15.5555L50.8562 15.5564ZM48.3439 0.316528H43.8559V23.1051H48.3439V0.316528ZM41.3427 0.316528H36.8547V23.1051H41.3427V0.316528ZM26.9809 23.4934C24.8272 23.4934 23.1034 22.7529 21.7391 21.4828C20.4106 20.2478 19.6569 18.4488 19.6569 16.3328V7.40766H24.145V16.3328C24.145 17.2147 24.432 17.8498 24.9344 18.3434C25.4369 18.8371 26.0833 19.119 26.9809 19.119H27.0167C27.9143 19.119 28.5607 18.8371 29.0631 18.3434C29.5656 17.8498 29.8525 17.2147 29.8525 16.3328V7.40766H34.3406V16.3328C34.3406 18.4497 33.5869 20.2486 32.2584 21.4828C30.8941 22.7529 29.1704 23.4934 27.0167 23.4934H26.9809ZM9.31558 11.7811C10.4287 11.7811 11.2905 12.1342 11.9369 12.7684C12.5833 13.4035 12.906 14.1791 12.906 15.2375V15.2726C12.906 16.3311 12.5833 17.1067 11.9369 17.7418C11.2905 18.3768 10.4287 18.7299 9.31558 18.7299H8.66919C7.55611 18.7299 6.69426 18.3768 6.04787 17.7418C5.40148 17.1067 5.07873 16.3311 5.07873 15.2726V15.2375C5.07873 14.1791 5.40148 13.4035 6.04787 12.7684C6.69426 12.1333 7.55611 11.7811 8.66919 11.7811H9.31558ZM12.6548 0.316528V7.40678H8.56191C6.19181 7.40678 4.2893 8.25353 2.85347 9.66421C1.38099 11.1109 0.591553 12.9098 0.591553 15.2384V15.2735C0.591553 17.6021 1.38188 19.401 2.85347 20.8468C4.2893 22.2575 6.1927 23.1042 8.56191 23.1042H17.1438V0.316528H12.6557H12.6548Z"/></svg>
+  </a>
   <div class="nav-mark">Outpost&nbsp;/&nbsp;orders</div>
   <ol>
     <li><a href="#start">How it works</a></li>
@@ -838,7 +846,7 @@ Content-Type: application/json
 </section>
 
 <footer>
-  <p>Dully · Outpost order integration · Fields not documented here are not sent.</p>
+  <p><a href="https://dully.io">dully.io</a> · Outpost order integration · Fields not documented here are not sent.</p>
 </footer>
 
 </main>
