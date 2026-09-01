@@ -488,12 +488,12 @@ webhook-source: dully
     "acceptedOffer": [
       {
         "@type": "Offer",
-        "price": 36.0,
+        "price": 39.0,
         "priceCurrency": "DKK",
         "eligibleQuantity": { "@type": "QuantitativeValue", "value": 3 },
         "priceSpecification": {
           "@type": "PriceSpecification",
-          "price": 12.0,
+          "price": 13.0,
           "priceCurrency": "DKK"
         },
         "itemOffered": {
@@ -510,9 +510,9 @@ webhook-source: dully
         "addOn": [
           {
             "@type": "Offer",
-            "price": 15.0,
+            "price": 5.0,
             "priceCurrency": "DKK",
-            "eligibleQuantity": { "@type": "QuantitativeValue", "value": 3 },
+            "eligibleQuantity": { "@type": "QuantitativeValue", "value": 1 },
             "priceSpecification": {
               "@type": "PriceSpecification",
               "price": 5.0,
@@ -607,8 +607,8 @@ webhook-source: dully
     <tbody>
       <tr><td>price</td><td><span class="pill">always</span></td><td>Line total with VAT. Quantity, options and discounts are already applied.</td></tr>
       <tr><td>priceCurrency</td><td><span class="pill">always</span></td><td>ISO currency code, for example <code>DKK</code>.</td></tr>
-      <tr><td>eligibleQuantity</td><td><span class="pill">always</span></td><td><code>QuantitativeValue</code> holding the quantity.</td></tr>
-      <tr><td>priceSpecification</td><td><span class="pill">always</span></td><td>Unit price with VAT, options and discounts already applied.</td></tr>
+      <tr><td>eligibleQuantity</td><td><span class="pill">always</span></td><td><code>QuantitativeValue</code> holding the quantity. On an <code>addOn</code> this is the option's own per-unit count, independent of the parent line's quantity — not multiplied by it.</td></tr>
+      <tr><td>priceSpecification</td><td><span class="pill">always</span></td><td>Unit price with VAT: <code>price = priceSpecification.price × eligibleQuantity.value</code> always holds, on every offer. On a product line this includes the cost of its options. On an <code>addOn</code>, this is the price for a single unit of the parent line (its own <code>eligibleQuantity</code> already factored in) — not multiplied by the parent's quantity.</td></tr>
       <tr><td>itemOffered</td><td><span class="pill">always</span></td><td><code>Product</code>: <code>name</code>, <code>category</code>, <code>productID</code>, <code>sku</code>, and an absolute <code>image</code> URL when the product has one.</td></tr>
       <tr><td>addOn</td><td><span class="pill">conditional</span></td><td>Options and modifiers chosen for this line. Each is an <code>Offer</code> with the same fields. Add-ons carry no product image.</td></tr>
       <tr><td>additionalProperty</td><td><span class="pill">conditional</span></td><td>Sent only when the customer wrote a note on this line: a single <code>customerComment</code> property.</td></tr>
@@ -618,7 +618,8 @@ webhook-source: dully
 
   <div class="note">
     <span class="tag">Reading prices</span>
-    <p><code>priceSpecification</code> is the unit price with VAT, including the options on that line and its share of any discount. A 5.00 burger with 8.00 of toppings and 1.00 off arrives as a unit price of 12.00, and three of them as a line <code>price</code> of 36.00.</p>
+    <p><code>priceSpecification</code> is the unit price with VAT, including the options on that line. A 5.00 burger with 8.00 of toppings arrives as a unit price of 13.00, and three of them as a line <code>price</code> of 39.00 — before any discount.</p>
+    <p>Discounts targeted at a specific product or category are baked into that line's price. An order-wide discount (a code or reward with no product/category target) is <strong>not</strong> distributed into line prices — every line keeps its full pre-discount price, and the reduction only shows up as the gap between <code>priceBeforeDiscount</code> and <code>totalPaymentDue.price</code>. Sum the line prices and compare against <code>priceBeforeDiscount</code> to tell which case you're in.</p>
     <p>The <code>addOn</code> prices are shown separately for display, so do not add them on top of the parent line when you calculate a total. Use <code>totalPaymentDue.price</code> for the amount charged.</p>
   </div>
 </section>
